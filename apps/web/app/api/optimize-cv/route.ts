@@ -77,8 +77,9 @@ export async function POST(request: NextRequest) {
     if (!openRouterKey) return err('OpenRouter not configured', 503)
 
     const body = await request.json().catch(() => ({}))
-    const { data: input, error: validationError } = validate(BodySchema, body)
-    if (validationError) return validationError
+    const parsed = validate(BodySchema, body)
+    if (parsed.error) return parsed.error
+    const input = parsed.data
 
     const resume = await supabaseAdmin
       .from('base_resumes')

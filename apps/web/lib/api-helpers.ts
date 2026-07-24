@@ -21,7 +21,7 @@ export async function getUserFromRequest(request: NextRequest) {
 export function validate<T>(
   schema: z.ZodSchema<T>,
   data: unknown,
-): { data?: T; error?: NextResponse } {
+): { data: T; error?: undefined } | { data?: undefined; error: NextResponse } {
   const result = schema.safeParse(data)
   if (!result.success) {
     return {
@@ -31,7 +31,7 @@ export function validate<T>(
       ),
     }
   }
-  return { data: result.data }
+  return { data: result.data, error: undefined }
 }
 
 export function ok<T>(data: T, status = 200) {
