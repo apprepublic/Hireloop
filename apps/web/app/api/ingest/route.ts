@@ -9,9 +9,9 @@ export async function POST(request: NextRequest) {
 
     const results = await ingestAll()
     return ok({ results })
-  } catch (err: any) {
-    console.error('Ingestion error:', err)
-    return err(err.message || 'Internal error', 500)
+  } catch (e: any) {
+    console.error('Ingestion error:', e)
+    return err(e.message || 'Internal error', 500)
   }
 }
 

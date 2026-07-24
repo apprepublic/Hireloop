@@ -61,9 +61,9 @@ export async function POST(request: NextRequest) {
     runAgent(application.id, job, input.optimized_cv_id ?? null)
 
     return ok({ application_id: application.id, status: 'started' })
-  } catch (err: any) {
-    console.error('Auto-apply error:', err)
-    return err(err.message || 'Internal error', 500)
+  } catch (e: any) {
+    console.error('Auto-apply error:', e)
+    return err(e.message || 'Internal error', 500)
   }
 }
 

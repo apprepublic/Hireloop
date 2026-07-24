@@ -178,8 +178,8 @@ export async function POST(request: NextRequest) {
       flagged_terms: flaggedTerms,
       created_at: optimized.created_at,
     })
-  } catch (err: any) {
-    console.error('Optimize CV error:', err)
-    return err(err.message || 'Internal error', 500)
+  } catch (e: any) {
+    console.error('Optimize CV error:', e)
+    return err(e.message || 'Internal error', 500)
   }
 }

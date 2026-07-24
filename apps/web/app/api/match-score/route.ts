@@ -96,8 +96,8 @@ export async function POST(request: NextRequest) {
       reasoning: result.reasoning || '',
       breakdown: result.breakdown || {},
     })
-  } catch (err: any) {
-    console.error('Match score error:', err)
-    return err(err.message || 'Internal error', 500)
+  } catch (e: any) {
+    console.error('Match score error:', e)
+    return err(e.message || 'Internal error', 500)
   }
 }

@@ -48,7 +48,7 @@ export function detectATSPlatform(applyUrl: string): string | null {
   return null
 }
 
-export function getATSFieldHints(atsPlatform: string): Record<string, string[]> {
+export function getATSFieldHints(atsPlatform: string): string[] {
   const common = ['name', 'email', 'phone', 'resume', 'cover_letter']
   const hints: Record<string, string[]> = {
     greenhouse: [...common, 'linkedin_profile', 'website', 'work_authorization', 'gender', 'race', 'veteran', 'disability'],
