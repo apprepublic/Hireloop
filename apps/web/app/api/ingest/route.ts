@@ -2,6 +2,8 @@ import { NextRequest } from 'next/server'
 import { getUserFromRequest, ok, err } from '@/lib/api-helpers'
 import { ingestAll } from '@/lib/ingestion'
 
+export const runtime = 'edge'
+
 export async function POST(request: NextRequest) {
   try {
     const user = await getUserFromRequest(request)

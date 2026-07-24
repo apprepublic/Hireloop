@@ -4,6 +4,8 @@ import { getUserFromRequest, validate, ok, err } from '@/lib/api-helpers'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
 import { ATS_PLATFORMS, getATSFieldHints } from '@/lib/ingestion/normalizer'
 
+export const runtime = 'edge'
+
 const BodySchema = z.object({
   job_id: z.string().uuid(),
   optimized_cv_id: z.string().uuid().optional(),

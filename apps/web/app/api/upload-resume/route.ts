@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
 import { getUserFromRequest, err } from '@/lib/api-helpers'
 
+export const runtime = 'edge'
+
 export async function POST(req: NextRequest) {
   const user = await getUserFromRequest(req)
   if (!user) return err('Unauthorized', 401)

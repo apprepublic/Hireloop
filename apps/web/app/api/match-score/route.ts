@@ -3,6 +3,8 @@ import { z } from 'zod'
 import { getUserFromRequest, validate, ok, err } from '@/lib/api-helpers'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
 
+export const runtime = 'edge'
+
 const BodySchema = z.object({
   job_id: z.string().uuid(),
   criteria: z.any().optional(),
