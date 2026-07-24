@@ -51,7 +51,7 @@ async function upsertJobs(
   let updated = 0
 
   for (const raw of rawJobs) {
-    const normalized = normalizeJob(raw)
+    const normalized = await normalizeJob(raw)
 
     const { data: existing } = await getSupabaseAdmin()
       .from('jobs')
