@@ -52,9 +52,9 @@ export async function getJobs(opts: {
     q = q.gte('salary_max', opts.salary_min)
   }
 
-  if (opts.keywords && opts.keywords.length > 0) {
+    if (opts.keywords && opts.keywords.length > 0) {
     const searchTerms = opts.keywords.join(' | ')
-    q = q.textSearch('fts', searchTerms, { config: 'english' })
+    q = q.textSearch('fts', searchTerms)
   }
 
   const { data, error } = await q
