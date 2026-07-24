@@ -9,6 +9,10 @@
       "dependsOn": ["^build"],
       "outputs": ["dist/**", ".next/**"]
     },
+    "pages:build": {
+      "dependsOn": ["^build"],
+      "outputs": [".vercel/output/**"]
+    },
     "lint": {
       "dependsOn": ["^lint"]
     },

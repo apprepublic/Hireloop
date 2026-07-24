@@ -12,6 +12,7 @@
     "dev:web": "cd apps/web && npm run dev",
     "dev:api": "cd services/api && npm run dev",
     "build": "turbo run build",
+    "pages:build": "turbo run pages:build",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "format": "prettier --write \"**/*.{ts,tsx,md,json}\""

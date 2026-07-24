@@ -262,32 +262,23 @@ export async function uploadResume(
   userId: string,
   file: File,
 ): Promise<BaseResume> {
-  const fileExt = file.name.split('.').pop()
-  const filePath = `${userId}/${crypto.randomUUID()}.${fileExt}`
+  const token = (await supabase.auth.getSession()).data.session?.access_token
+  if (!token) throw new Error('Not authenticated')
 
-  const { error: uploadError } = await supabase.storage
-    .from('resumes')
-    .upload(filePath, file)
+  const formData = new FormData()
+  formData.append('file', file)
 
-  if (uploadError) throw uploadError
+  const res = await fetch('/api/upload-resume', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: formData,
+  })
 
-  const { data: urlData } = supabase.storage.from('resumes').getPublicUrl(filePath)
-
-  const { data, error } = await supabase
-    .from('base_resumes')
-    .insert({
-      user_id: userId,
-      file_url: urlData.publicUrl,
-      file_type: fileExt === 'pdf' ? 'pdf' : 'docx',
-      parsed_sections: null,
-    })
-    .select()
-    .single()
-
-  if (error) {
-    await supabase.storage.from('resumes').remove([filePath])
-    throw error
+  if (!res.ok) {
+    const body = await res.json()
+    throw new Error(body.error || 'Upload failed')
   }
 
-  return data as unknown as BaseResume
+  const data = await res.json()
+  return data.resume as BaseResume
 }
