@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
     if (insertError) return err('Failed to create application', 500)
 
     await addAuditLog(application.id, 'pre_flight_check', { ats_platform: job.ats_platform, eligible: true })
-    runAgent(application.id, job, input.optimized_cv_id)
+    runAgent(application.id, job, input.optimized_cv_id ?? null)
 
     return ok({ application_id: application.id, status: 'started' })
   } catch (err: any) {
