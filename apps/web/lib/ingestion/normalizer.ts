@@ -20,17 +20,55 @@ export function computeMatchScore(job: RawJob): number {
   return Math.min(score, 100)
 }
 
+export const ATS_PLATFORMS = [
+  { id: 'greenhouse', domain: 'greenhouse', label: 'Greenhouse' },
+  { id: 'lever', domain: 'lever', label: 'Lever' },
+  { id: 'workable', domain: 'workable', label: 'Workable' },
+  { id: 'bamboohr', domain: 'bamboohr', label: 'BambooHR' },
+  { id: 'icims', domain: 'icims', label: 'iCIMS' },
+  { id: 'smartrecruiters', domain: 'smartrecruiters', label: 'SmartRecruiters' },
+  { id: 'jobvite', domain: 'jobvite', label: 'Jobvite' },
+  { id: 'ashby', domain: 'ashbyhq', label: 'Ashby' },
+  { id: 'pinpoint', domain: 'pinpointhq', label: 'Pinpoint' },
+  { id: 'comeet', domain: 'comeet', label: 'Comeet' },
+  { id: 'freshteam', domain: 'freshteam', label: 'Freshteam' },
+  { id: 'manatal', domain: 'manatal', label: 'Manatal' },
+  { id: 'recruitee', domain: 'recruitee', label: 'Recruitee' },
+  { id: 'teamtailor', domain: 'teamtailor', label: 'Teamtailor' },
+  { id: 'breezy', domain: 'breezy', label: 'Breezy' },
+  { id: 'zohorecruit', domain: 'zohorecruit', label: 'Zoho Recruit' },
+]
+
 export function detectATSPlatform(applyUrl: string): string | null {
   if (!applyUrl) return null
   const url = applyUrl.toLowerCase()
-  if (url.includes('greenhouse')) return 'greenhouse'
-  if (url.includes('lever')) return 'lever'
-  if (url.includes('workable')) return 'workable'
-  if (url.includes('bamboohr')) return 'bamboohr'
-  if (url.includes('icims')) return 'icims'
-  if (url.includes('smartrecruiters')) return 'smartrecruiters'
-  if (url.includes('jobvite')) return 'jobvite'
+  for (const ats of ATS_PLATFORMS) {
+    if (url.includes(ats.domain)) return ats.id
+  }
   return null
+}
+
+export function getATSFieldHints(atsPlatform: string): Record<string, string[]> {
+  const common = ['name', 'email', 'phone', 'resume', 'cover_letter']
+  const hints: Record<string, string[]> = {
+    greenhouse: [...common, 'linkedin_profile', 'website', 'work_authorization', 'gender', 'race', 'veteran', 'disability'],
+    lever: [...common, 'linkedin_profile', 'website', 'work_authorization', 'how_did_you_hear'],
+    workable: [...common, 'linkedin_profile', 'website', 'work_authorization', 'how_did_you_hear', 'salary_expectation'],
+    bamboohr: [...common, 'linkedin_profile', 'work_authorization', 'how_did_you_hear'],
+    icims: [...common, 'linkedin_profile', 'work_authorization', 'how_did_you_hear', 'salary_expectation'],
+    smartrecruiters: [...common, 'linkedin_profile', 'how_did_you_hear'],
+    jobvite: [...common, 'linkedin_profile', 'work_authorization', 'how_did_you_hear'],
+    ashby: [...common, 'linkedin_profile', 'website', 'work_authorization', 'how_did_you_hear'],
+    pinpoint: [...common, 'linkedin_profile', 'work_authorization', 'how_did_you_hear'],
+    comeet: [...common, 'linkedin_profile', 'how_did_you_hear'],
+    freshteam: [...common, 'linkedin_profile', 'work_authorization', 'how_did_you_hear'],
+    manatal: [...common, 'linkedin_profile', 'work_authorization', 'how_did_you_hear'],
+    recruitee: [...common, 'linkedin_profile', 'how_did_you_hear'],
+    teamtailor: [...common, 'linkedin_profile', 'how_did_you_hear'],
+    breezy: [...common, 'linkedin_profile', 'website', 'work_authorization'],
+    zohorecruit: [...common, 'linkedin_profile', 'work_authorization', 'how_did_you_hear', 'salary_expectation'],
+  }
+  return hints[atsPlatform] || common
 }
 
 export function normalizeJob(raw: RawJob) {

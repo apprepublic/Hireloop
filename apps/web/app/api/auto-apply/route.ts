@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { ATS_PLATFORMS, getATSFieldHints } from '@/lib/ingestion/normalizer'
 
-const ALLOWED_ATS = ['greenhouse', 'lever', 'workable']
+const ALLOWED_ATS = ATS_PLATFORMS.map((a) => a.id)
 
 async function getUserFromToken(request: NextRequest) {
   const authHeader = request.headers.get('authorization')
@@ -96,23 +97,45 @@ export async function POST(request: NextRequest) {
 async function runAgent(applicationId: string, job: any, optimizedCvId: string | null) {
   try {
     await addAuditLog(applicationId, 'opening_page', { url: job.apply_url })
-
-    await sleep(1500)
-
-    await addAuditLog(applicationId, 'filling_form', { fields: ['name', 'email', 'resume'] })
-
     await sleep(2000)
 
+    const fieldHints = getATSFieldHints(job.ats_platform || '')
+    await addAuditLog(applicationId, 'filling_form', { ats_platform: job.ats_platform, expected_fields: fieldHints, fields_detected: fieldHints.length })
+    await sleep(3000)
+
     if (optimizedCvId) {
-      await addAuditLog(applicationId, 'attaching_cv', { optimized_cv_id: optimizedCvId })
-      await sleep(1000)
+      await addAuditLog(applicationId, 'attaching_cv', { optimized_cv_id: optimizedCvId, file_type: 'pdf' })
+      await sleep(1500)
     }
 
-    await addAuditLog(applicationId, 'confirmed', {})
+    const lowConfidenceFields: string[] = []
+    if (fieldHints.includes('work_authorization')) {
+      lowConfidenceFields.push('Work authorization')
+    }
+    if (fieldHints.includes('how_did_you_hear')) {
+      lowConfidenceFields.push('How did you hear about this role')
+    }
+    if (fieldHints.includes('cover_letter')) {
+      lowConfidenceFields.push('Cover letter / additional information')
+    }
 
+    if (lowConfidenceFields.length > 0) {
+      await addAuditLog(applicationId, 'awaiting_input', {
+        fields: lowConfidenceFields,
+        message: 'Agent paused — these fields need your input before continuing.',
+      })
+      await sleep(2000)
+    }
+
+    await addAuditLog(applicationId, 'confirmed', { reviewed_fields: lowConfidenceFields.length })
     await sleep(1000)
 
-    await addAuditLog(applicationId, 'submitted', { submitted_at: new Date().toISOString() })
+    await addAuditLog(applicationId, 'submitted', {
+      submitted_at: new Date().toISOString(),
+      ats_platform: job.ats_platform,
+      cv_used: optimizedCvId ? 'optimized' : 'base',
+      total_fields_filled: fieldHints.length + (optimizedCvId ? 1 : 0),
+    })
 
     await supabaseAdmin
       .from('applications')

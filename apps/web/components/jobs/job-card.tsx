@@ -1,6 +1,7 @@
 'use client'
 
 import type { Job, SourceId } from '@hireloop/shared'
+import { MatchScoreBadge } from './match-score-badge'
 
 const sourceConfig: Record<SourceId, { label: string; className: string }> = {
   adzuna: { label: 'Adzuna', className: 'bg-blue-100 text-blue-700' },
@@ -41,9 +42,7 @@ export function JobCard({ job, savedState, onSave, onDismiss, onSelect }: JobCar
               {source.label}
             </span>
             {job.match_score > 0 && (
-              <span className="text-xs text-primary font-medium">
-                {job.match_score}% match
-              </span>
+              <MatchScoreBadge score={job.match_score} />
             )}
           </div>
           <h3 className="font-semibold text-base truncate">{job.title}</h3>

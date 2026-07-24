@@ -5,7 +5,9 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { getJobById, createApplication } from '@/lib/queries'
 import { useAuthStore } from '@/stores/authStore'
+import { supabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
+import { MatchScoreBadge } from '@/components/jobs/match-score-badge'
 import type { Job } from '@hireloop/shared'
 
 export default function JobDetailPage() {
@@ -16,6 +18,8 @@ export default function JobDetailPage() {
   const [loading, setLoading] = useState(true)
   const [applying, setApplying] = useState(false)
   const [applied, setApplied] = useState(false)
+  const [mlScore, setMlScore] = useState<{ score: number; reasoning: string; breakdown: any } | null>(null)
+  const [scoring, setScoring] = useState(false)
 
   useEffect(() => {
     if (!params.id) return
@@ -36,6 +40,24 @@ export default function JobDetailPage() {
       console.error('Failed to track application', e)
     } finally {
       setApplying(false)
+    }
+  }
+
+  const handleMLScore = async () => {
+    if (!job || !user) return
+    setScoring(true)
+    try {
+      const { data: session } = await supabase.auth.getSession()
+      const token = session?.session?.access_token
+      const res = await fetch('/api/match-score', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ job_id: job.id }),
+      })
+      const data = await res.json()
+      if (res.ok) setMlScore(data)
+    } catch {} finally {
+      setScoring(false)
     }
   }
 
@@ -113,6 +135,39 @@ export default function JobDetailPage() {
             {job.seniority && <span>{job.seniority}</span>}
             {job.posted_at && (
               <span>{new Date(job.posted_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</span>
+            )}
+          </div>
+
+          <div className="bg-card border border-border rounded-lg p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold">AI Match Score</h3>
+              {!mlScore ? (
+                <Button variant="ghost" size="sm" onClick={handleMLScore} disabled={scoring}>
+                  {scoring ? 'Analyzing...' : 'Compute AI score'}
+                </Button>
+              ) : null}
+            </div>
+            {mlScore ? (
+              <div className="space-y-2">
+                <div className="flex items-center gap-3">
+                  <MatchScoreBadge score={mlScore.score} size="md" />
+                  <span className="text-sm text-muted-foreground">{mlScore.reasoning}</span>
+                </div>
+                {mlScore.breakdown && (
+                  <div className="grid grid-cols-5 gap-2 text-xs text-center">
+                    {Object.entries(mlScore.breakdown).map(([key, val]) => (
+                      <div key={key} className="bg-muted rounded p-1">
+                        <p className="capitalize">{key}</p>
+                        <p className="font-semibold">{String(val)}%</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Use AI to evaluate how well this job matches your profile beyond keyword overlap.
+              </p>
             )}
           </div>
 
