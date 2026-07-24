@@ -3,8 +3,3 @@ pages_build_output_dir = "apps/web/.vercel/output/static"
 
 compatibility_date = "2025-12-01"
 compatibility_flags = ["nodejs_compat"]
-
-[[d1_databases]]
-binding = "DB"
-database_name = "hireloop"
-database_id = ""
