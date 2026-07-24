@@ -3,25 +3,50 @@ import type { RawJob, IngestionResult } from './types'
 const APIFY_API_BASE = 'https://api.apify.com/v2'
 const ACTOR_ID = 'valig/linkedin-jobs-scraper'
 
+const MONTHLY_RUN_LIMIT = 5
+
+function parseSalary(salary: string | null): { salary_min: number | null; salary_max: number | null; currency: string } {
+  if (!salary) return { salary_min: null, salary_max: null, currency: 'USD' }
+
+  const currencyMatch = salary.match(/[$£€]/)
+  const currencyMap: Record<string, string> = { $: 'USD', '£': 'GBP', '€': 'EUR' }
+  const currency = currencyMap[currencyMatch?.[0] || ''] || 'USD'
+
+  const cleaned = salary.replace(/[$£€,]/g, '')
+  const numbers = cleaned.match(/([\d.]+)/g)?.map(Number) || []
+  const [min, max] = numbers.length >= 2 ? [numbers[0], numbers[1]] : numbers.length === 1 ? [numbers[0], null] : [null, null]
+
+  return { salary_min: min, salary_max: max, currency }
+}
+
 function mapLinkedInJob(item: any): RawJob | null {
   if (!item?.title || !item?.companyName) return null
 
+  const { salary_min, salary_max, currency } = parseSalary(item.salary || null)
+
+  const remoteMap: Record<string, boolean> = {
+    'remote': true,
+    'hybrid': false,
+    'on-site': false,
+  }
+  const isRemote = item.remote === '2' || remoteMap[item.workType?.toLowerCase()] === true || false
+
   return {
     source_id: 'linkedin_unofficial',
-    external_id: String(item.id || item.jobId || item.url),
+    external_id: String(item.id || item.url),
     title: item.title,
     company: item.companyName,
     location: item.location || null,
-    is_remote: item.workType === 'remote' || item.isRemote || false,
-    description: item.description || item.jobDescription || '',
-    salary_min: item.salaryMin || null,
-    salary_max: item.salaryMax || null,
-    currency: item.salaryCurrency || 'USD',
-    job_type: item.jobType?.toLowerCase() || null,
-    seniority: item.seniorityLevel?.toLowerCase() || null,
-    apply_url: item.url || item.jobUrl || '',
+    is_remote: isRemote,
+    description: item.description || item.descriptionHtml || '',
+    salary_min,
+    salary_max,
+    currency,
+    job_type: item.contractType?.toLowerCase() || null,
+    seniority: item.experienceLevel?.toLowerCase() || null,
+    apply_url: item.url || '',
     ats_platform: null,
-    posted_at: item.postedAt ? new Date(item.postedAt).toISOString() : null,
+    posted_at: item.postedDate ? new Date(item.postedDate).toISOString() : null,
   }
 }
 
@@ -34,15 +59,14 @@ export async function fetchLinkedInJobs(
   const jobs: RawJob[] = []
 
   try {
-    const runInput = {
-      position: searchTerms.join(' '),
-      location: location || '',
-      maxResults: 50,
-      proxy: { useApifyProxy: true },
+    const runInput: Record<string, unknown> = {
+      title: searchTerms.join(' '),
+      limit: 50,
     }
+    if (location) runInput.location = location
 
-    const runRes = await fetch(
-      `${APIFY_API_BASE}/acts/${ACTOR_ID}/runs?token=${apifyToken}`,
+    const res = await fetch(
+      `${APIFY_API_BASE}/acts/${ACTOR_ID}/run-sync-get-dataset-items?token=${apifyToken}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -50,43 +74,17 @@ export async function fetchLinkedInJobs(
       },
     )
 
-    if (!runRes.ok) {
-      const text = await runRes.text()
-      errors.push(`Apify run error ${runRes.status}: ${text}`)
-      return { jobs, result: { source: 'linkedin_unofficial', fetched: 0, inserted: 0, updated: 0, errors } }
-    }
-
-    const runData = await runRes.json()
-    const datasetId = runData.data?.defaultDatasetId
-
-    if (!datasetId) {
-      errors.push('Apify: no dataset ID returned')
-      return { jobs, result: { source: 'linkedin_unofficial', fetched: 0, inserted: 0, updated: 0, errors } }
-    }
-
-    const maxWait = 30
-    for (let i = 0; i < maxWait; i++) {
-      const statusRes = await fetch(
-        `${APIFY_API_BASE}/actor-runs/${runData.data.id}?token=${apifyToken}`,
-      )
-      const statusData = await statusRes.json()
-      if (statusData.data?.status === 'SUCCEEDED') break
-      if (statusData.data?.status === 'FAILED') {
-        errors.push('Apify actor run failed')
-        return { jobs, result: { source: 'linkedin_unofficial', fetched: 0, inserted: 0, updated: 0, errors } }
+    if (!res.ok) {
+      const text = await res.text()
+      if (res.status === 429) {
+        errors.push(`LinkedIn: Monthly ingestion limit reached (${MONTHLY_RUN_LIMIT})`)
+      } else {
+        errors.push(`LinkedIn: Apify error ${res.status}: ${text}`)
       }
-      await new Promise((r) => setTimeout(r, 3000))
-    }
-
-    const datasetRes = await fetch(
-      `${APIFY_API_BASE}/datasets/${datasetId}/items?token=${apifyToken}`,
-    )
-    if (!datasetRes.ok) {
-      errors.push(`Apify dataset fetch error ${datasetRes.status}`)
       return { jobs, result: { source: 'linkedin_unofficial', fetched: 0, inserted: 0, updated: 0, errors } }
     }
 
-    const items = await datasetRes.json()
+    const items = await res.json()
     for (const item of items) {
       const job = mapLinkedInJob(item)
       if (job) jobs.push(job)
