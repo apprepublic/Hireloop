@@ -1,0 +1,174 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum JobSourceId {
+  adzuna
+  jooble
+  linkedin_unofficial
+}
+
+model JobSource {
+  id          JobSourceId @id
+  display_name String
+  is_compliant Boolean     @default(true)
+  is_enabled  Boolean     @default(true)
+  created_at  DateTime    @default(now())
+
+  jobs Job[]
+}
+
+model Profile {
+  id        String   @id @default(uuid()) @db.Uuid
+  email     String
+  name      String?
+  role      String   @default("USER")
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  search_profiles  SearchProfile[]
+  base_resumes     BaseResume[]
+  applications     Application[]
+  saved_jobs       SavedJob[]
+
+  @@map("profiles")
+}
+
+model SearchProfile {
+  id                String        @id @default(uuid()) @db.Uuid
+  user_id           String        @db.Uuid
+  title_keywords    String[]
+  location          String?
+  remote_preference String        @default("any")
+  seniority         String?
+  salary_min        Int?
+  job_type          String?
+  enabled_sources   String[]
+  created_at        DateTime      @default(now())
+  updated_at        DateTime      @updatedAt
+
+  user Profile @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@map("search_profiles")
+}
+
+model Job {
+  id                  String   @id @default(uuid()) @db.Uuid
+  source_id           JobSourceId
+  external_id         String
+  title               String
+  company             String
+  location            String?
+  is_remote           Boolean  @default(false)
+  description         String
+  salary_min          Int?
+  salary_max          Int?
+  currency            String   @default("USD")
+  job_type            String?
+  seniority           String?
+  apply_url           String
+  ats_platform        String?
+  auto_apply_eligible Boolean @default(false)
+  posted_at           DateTime?
+  ingested_at         DateTime @default(now())
+  dedupe_hash         String
+  match_score         Int      @default(0)
+  created_at          DateTime @default(now())
+
+  source        JobSource        @relation(fields: [source_id], references: [id])
+  optimized_cvs OptimizedCV[]
+  applications  Application[]
+  saved_jobs    SavedJob[]
+
+  @@unique([source_id, external_id])
+  @@index([dedupe_hash])
+  @@index([posted_at])
+  @@map("jobs")
+}
+
+model BaseResume {
+  id              String   @id @default(uuid()) @db.Uuid
+  user_id         String   @db.Uuid
+  file_url        String
+  file_type       String
+  parsed_sections Json?
+  created_at      DateTime @default(now())
+
+  user          Profile       @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  optimized_cvs OptimizedCV[]
+
+  @@index([user_id])
+  @@map("base_resumes")
+}
+
+model OptimizedCV {
+  id                 String   @id @default(uuid()) @db.Uuid
+  base_resume_id     String   @db.Uuid
+  job_id             String   @db.Uuid
+  version            Int      @default(1)
+  generated_sections Json
+  flagged_terms      Json?
+  user_approved      Boolean  @default(false)
+  export_file_url    String?
+  created_at         DateTime @default(now())
+
+  base_resume  BaseResume    @relation(fields: [base_resume_id], references: [id], onDelete: Cascade)
+  job          Job           @relation(fields: [job_id], references: [id], onDelete: Cascade)
+  applications Application[]
+
+  @@unique([base_resume_id, job_id, version])
+  @@map("optimized_cvs")
+}
+
+model Application {
+  id              String   @id @default(uuid()) @db.Uuid
+  user_id         String   @db.Uuid
+  job_id          String   @db.Uuid
+  optimized_cv_id String?  @db.Uuid
+  method          String
+  status          String
+  submitted_at    DateTime?
+  created_at      DateTime @default(now())
+
+  user          Profile               @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  job           Job                   @relation(fields: [job_id], references: [id], onDelete: Cascade)
+  optimized_cv  OptimizedCV?          @relation(fields: [optimized_cv_id], references: [id])
+  audit_logs    ApplicationAuditLog[]
+
+  @@index([user_id, created_at])
+  @@map("applications")
+}
+
+model ApplicationAuditLog {
+  id             String   @id @default(uuid()) @db.Uuid
+  application_id String   @db.Uuid
+  step           String
+  snapshot_url   String?
+  field_values   Json?
+  created_at     DateTime @default(now())
+
+  application Application @relation(fields: [application_id], references: [id], onDelete: Cascade)
+
+  @@index([application_id])
+  @@map("application_audit_logs")
+}
+
+model SavedJob {
+  id         String   @id @default(uuid()) @db.Uuid
+  user_id    String   @db.Uuid
+  job_id     String   @db.Uuid
+  state      String
+  created_at DateTime @default(now())
+
+  user Profile @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  job  Job     @relation(fields: [job_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, job_id])
+  @@map("saved_jobs")
+}
