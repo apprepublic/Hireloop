@@ -12,12 +12,14 @@ export async function ingestAll(): Promise<IngestionResult[]> {
 
   const adzunaId = process.env.ADZUNA_APP_ID
   const adzunaKey = process.env.ADZUNA_API_KEY
+  const adzunaCountry = process.env.ADZUNA_COUNTRY || 'gb'
   const joobleKey = process.env.JOOBLE_API_KEY
   const apifyToken = process.env.APIFY_API_TOKEN
   const linkedInEnabled = process.env.LINKEDIN_INGESTION_ENABLED === 'true'
+  const searchKeywords = process.env.INGESTION_KEYWORDS || 'software engineer'
 
   if (adzunaId && adzunaKey) {
-    const { jobs, result } = await fetchAdzunaJobs(adzunaId, adzunaKey)
+    const { jobs, result } = await fetchAdzunaJobs(adzunaId, adzunaKey, adzunaCountry, searchKeywords)
     const { inserted, updated } = await upsertJobs(jobs)
     results.push({ ...result, inserted, updated })
   } else {
@@ -25,7 +27,7 @@ export async function ingestAll(): Promise<IngestionResult[]> {
   }
 
   if (joobleKey) {
-    const { jobs, result } = await fetchJoobleJobs(joobleKey, 'software engineer')
+    const { jobs, result } = await fetchJoobleJobs(joobleKey, searchKeywords)
     const { inserted, updated } = await upsertJobs(jobs)
     results.push({ ...result, inserted, updated })
   } else {

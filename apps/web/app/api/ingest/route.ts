@@ -23,6 +23,7 @@ export async function GET() {
     jooble: !!process.env.JOOBLE_API_KEY,
     linkedin: !!process.env.APIFY_API_TOKEN && process.env.LINKEDIN_INGESTION_ENABLED === 'true',
     adzuna_country: process.env.ADZUNA_COUNTRY || 'gb',
+    keywords: process.env.INGESTION_KEYWORDS || 'software engineer',
   }
   return ok({ config })
 }

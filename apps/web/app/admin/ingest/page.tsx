@@ -10,7 +10,8 @@ import type { IngestionResult } from '@/lib/ingestion'
 export default function AdminIngestPage() {
   const router = useRouter()
   const [results, setResults] = useState<IngestionResult[] | null>(null)
-  const [config, setConfig] = useState<Record<string, boolean> | null>(null)
+  const [apiError, setApiError] = useState<string | null>(null)
+  const [config, setConfig] = useState<Record<string, any> | null>(null)
   const [running, setRunning] = useState(false)
   const [loadingConfig, setLoadingConfig] = useState(true)
 
@@ -24,6 +25,7 @@ export default function AdminIngestPage() {
   const handleRun = async () => {
     setRunning(true)
     setResults(null)
+    setApiError(null)
 
     try {
       const { data: session } = await supabase.auth.getSession()
@@ -34,9 +36,14 @@ export default function AdminIngestPage() {
         headers: { Authorization: `Bearer ${token}` },
       })
       const data = await res.json()
-      setResults(data.results || [])
+      if (!res.ok) {
+        setApiError(data.error || `HTTP ${res.status}`)
+        setResults(data.results || null)
+      } else {
+        setResults(data.results || [])
+      }
     } catch (err: any) {
-      setResults([{ source: 'error', fetched: 0, inserted: 0, updated: 0, errors: [err.message] } as any])
+      setApiError(err.message)
     } finally {
       setRunning(false)
     }
@@ -61,7 +68,7 @@ export default function AdminIngestPage() {
             <p className="text-sm text-muted-foreground">Loading...</p>
           ) : config ? (
             <div className="space-y-2 text-sm">
-              {Object.entries(config).filter(([k]) => k !== 'adzuna_country').map(([key, enabled]) => (
+              {Object.entries(config).filter(([k]) => k !== 'adzuna_country' && k !== 'keywords').map(([key, enabled]) => (
                 <div key={key} className="flex items-center gap-2">
                   <div className={`w-2 h-2 rounded-full ${enabled ? 'bg-green-500' : 'bg-red-400'}`} />
                   <span className="capitalize">{key}</span>
@@ -70,6 +77,9 @@ export default function AdminIngestPage() {
               ))}
               <p className="text-xs text-muted-foreground mt-2">
                 Adzuna region: {config.adzuna_country}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Keywords: {config.keywords}
               </p>
             </div>
           ) : null}
@@ -80,6 +90,13 @@ export default function AdminIngestPage() {
             </Button>
           </div>
         </div>
+
+        {apiError && (
+          <div className="bg-card border border-red-500/50 rounded-lg p-6">
+            <h2 className="font-semibold text-red-600 mb-2">Error</h2>
+            <p className="text-sm text-red-600">{apiError}</p>
+          </div>
+        )}
 
         {results && (
           <div className="bg-card border border-border rounded-lg p-6">
@@ -112,7 +129,8 @@ ADZUNA_API_KEY       — https://developer.adzuna.com/
 ADZUNA_COUNTRY       — 'gb' (default), 'us', 'ca', etc.
 JOOBLE_API_KEY       — https://jooble.org/api/about
 APIFY_API_TOKEN      — https://console.apify.com/ (for LinkedIn)
-LINKEDIN_INGESTION_ENABLED — 'true' to enable LinkedIn source`}
+LINKEDIN_INGESTION_ENABLED — 'true' to enable LinkedIn source
+INGESTION_KEYWORDS   — search term (default: 'software engineer')`}
           </pre>
         </div>
       </main>
