@@ -1,22 +1,12 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { NextRequest } from 'next/server'
+import { z } from 'zod'
+import { getUserFromRequest, validate, ok, err } from '@/lib/api-helpers'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 
-async function getUserFromToken(request: NextRequest) {
-  const authHeader = request.headers.get('authorization')
-  if (!authHeader?.startsWith('Bearer ')) return null
-  const token = authHeader.slice(7)
-
-  const anonClient = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    { global: { headers: { Authorization: `Bearer ${token}` } } },
-  )
-
-  const { data } = await anonClient.auth.getUser(token)
-  if (!data.user) return null
-  return data.user
-}
+const BodySchema = z.object({
+  job_id: z.string().uuid(),
+  criteria: z.any().optional(),
+})
 
 function buildScorePrompt(job: any, criteria?: any) {
   return `You are a job-match evaluator. Score how well this job aligns with the candidate's search criteria.
@@ -45,33 +35,24 @@ RULES:
 
 export async function POST(request: NextRequest) {
   try {
-    const user = await getUserFromToken(request)
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const user = await getUserFromRequest(request)
+    if (!user) return err('Unauthorized', 401)
+    if (!process.env.OPENROUTER_API_KEY) return err('OpenRouter not configured', 503)
 
-    if (!process.env.OPENROUTER_API_KEY) {
-      return NextResponse.json({ error: 'OpenRouter not configured' }, { status: 503 })
-    }
-
-    const { job_id, criteria } = await request.json()
-    if (!job_id) {
-      return NextResponse.json({ error: 'job_id is required' }, { status: 400 })
-    }
+    const body = await request.json().catch(() => ({}))
+    const { data: input, error: validationError } = validate(BodySchema, body)
+    if (validationError) return validationError
 
     const job = await supabaseAdmin
       .from('jobs')
       .select('*')
-      .eq('id', job_id)
+      .eq('id', input.job_id)
       .single()
       .then((r) => r.data)
 
-    if (!job) {
-      return NextResponse.json({ error: 'Job not found' }, { status: 404 })
-    }
+    if (!job) return err('Job not found', 404)
 
-    const prompt = buildScorePrompt(job, criteria)
-
+    const prompt = buildScorePrompt(job, input.criteria)
     const llmRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -93,24 +74,22 @@ export async function POST(request: NextRequest) {
 
     if (!llmRes.ok) {
       const errText = await llmRes.text()
-      return NextResponse.json({ error: `AI error: ${errText}` }, { status: 502 })
+      return err(`AI error: ${errText}`, 502)
     }
 
     const llmData = await llmRes.json()
     const content = llmData.choices?.[0]?.message?.content
-    if (!content) {
-      return NextResponse.json({ error: 'Empty AI response' }, { status: 502 })
-    }
+    if (!content) return err('Empty AI response', 502)
 
     const cleaned = content.replace(/```json\s*/gi, '').replace(/```\s*$/g, '').trim()
     let result: any
     try {
       result = JSON.parse(cleaned)
     } catch {
-      return NextResponse.json({ error: 'Failed to parse AI response' }, { status: 502 })
+      return err('Failed to parse AI response', 502)
     }
 
-    return NextResponse.json({
+    return ok({
       job_id: job.id,
       ml_score: Math.round(Math.max(0, Math.min(100, result.score || 0))),
       reasoning: result.reasoning || '',
@@ -118,6 +97,6 @@ export async function POST(request: NextRequest) {
     })
   } catch (err: any) {
     console.error('Match score error:', err)
-    return NextResponse.json({ error: err.message || 'Internal error' }, { status: 500 })
+    return err(err.message || 'Internal error', 500)
   }
 }

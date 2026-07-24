@@ -1,24 +1,12 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { NextRequest } from 'next/server'
+import { z } from 'zod'
+import { getUserFromRequest, validate, ok, err } from '@/lib/api-helpers'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 
-const openRouterKey = process.env.OPENROUTER_API_KEY
-
-async function getUserFromToken(request: NextRequest) {
-  const authHeader = request.headers.get('authorization')
-  if (!authHeader?.startsWith('Bearer ')) return null
-  const token = authHeader.slice(7)
-
-  const anonClient = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    { global: { headers: { Authorization: `Bearer ${token}` } } },
-  )
-
-  const { data, error } = await anonClient.auth.getUser(token)
-  if (error || !data.user) return null
-  return { id: data.user.id, token }
-}
+const BodySchema = z.object({
+  base_resume_id: z.string().uuid(),
+  job_id: z.string().uuid(),
+})
 
 function buildPrompt(baseResume: any, job: any) {
   return `You are a professional resume writer. Tailor the following resume for the specific job below.
@@ -50,7 +38,6 @@ Return only the JSON, no markdown, no explanation.`
 function extractTerms(sections: any): Set<string> {
   const terms = new Set<string>()
   if (!sections) return terms
-
   if (sections.skills) sections.skills.forEach((s: string) => terms.add(s.toLowerCase()))
   if (sections.experience) {
     sections.experience.forEach((e: any) => {
@@ -75,68 +62,49 @@ function extractTerms(sections: any): Set<string> {
 function findFlaggedTerms(generated: any, baseTerms: Set<string>): string[] {
   const flagged: string[] = []
   const generatedTerms = extractTerms(generated)
-
   generatedTerms.forEach((term: string) => {
-    if (!baseTerms.has(term) && term.length > 3) {
-      flagged.push(term)
-    }
+    if (!baseTerms.has(term) && term.length > 3) flagged.push(term)
   })
-
   return flagged
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const user = await getUserFromToken(request)
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const user = await getUserFromRequest(request)
+    if (!user) return err('Unauthorized', 401)
 
-    if (!openRouterKey) {
-      return NextResponse.json({ error: 'OpenRouter not configured' }, { status: 503 })
-    }
+    const openRouterKey = process.env.OPENROUTER_API_KEY
+    if (!openRouterKey) return err('OpenRouter not configured', 503)
 
-    const { base_resume_id, job_id } = await request.json()
-    if (!base_resume_id || !job_id) {
-      return NextResponse.json({ error: 'base_resume_id and job_id are required' }, { status: 400 })
-    }
+    const body = await request.json().catch(() => ({}))
+    const { data: input, error: validationError } = validate(BodySchema, body)
+    if (validationError) return validationError
 
     const resume = await supabaseAdmin
       .from('base_resumes')
       .select('*')
-      .eq('id', base_resume_id)
+      .eq('id', input.base_resume_id)
       .single()
       .then((r) => r.data)
 
-    if (!resume) {
-      return NextResponse.json({ error: 'Resume not found' }, { status: 404 })
-    }
-
-    if (resume.user_id !== user.id) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
-
-    if (!resume.parsed_sections) {
-      return NextResponse.json({ error: 'Resume has not been parsed yet' }, { status: 400 })
-    }
+    if (!resume) return err('Resume not found', 404)
+    if (resume.user_id !== user.id) return err('Forbidden', 403)
+    if (!resume.parsed_sections) return err('Resume has not been parsed yet', 400)
 
     const job = await supabaseAdmin
       .from('jobs')
       .select('*')
-      .eq('id', job_id)
+      .eq('id', input.job_id)
       .single()
       .then((r) => r.data)
 
-    if (!job) {
-      return NextResponse.json({ error: 'Job not found' }, { status: 404 })
-    }
+    if (!job) return err('Job not found', 404)
 
     const prompt = buildPrompt(resume, job)
-
-    const llmResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    const llmRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${openRouterKey}`,
+        Authorization: `Bearer ${openRouterKey}`,
         'Content-Type': 'application/json',
         'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
         'X-Title': 'HireLoop',
@@ -152,24 +120,22 @@ export async function POST(request: NextRequest) {
       }),
     })
 
-    if (!llmResponse.ok) {
-      const errText = await llmResponse.text()
-      console.error('OpenRouter error:', llmResponse.status, errText)
-      return NextResponse.json({ error: 'AI service error' }, { status: 502 })
+    if (!llmRes.ok) {
+      const errText = await llmRes.text()
+      console.error('OpenRouter error:', llmRes.status, errText)
+      return err('AI service error', 502)
     }
 
-    const llmData = await llmResponse.json()
+    const llmData = await llmRes.json()
     const content = llmData.choices?.[0]?.message?.content
-    if (!content) {
-      return NextResponse.json({ error: 'Empty AI response' }, { status: 502 })
-    }
+    if (!content) return err('Empty AI response', 502)
 
     const cleaned = content.replace(/```json\s*/gi, '').replace(/```\s*$/g, '').trim()
     let generatedSections: any
     try {
       generatedSections = JSON.parse(cleaned)
     } catch {
-      return NextResponse.json({ error: 'Failed to parse AI response' }, { status: 502 })
+      return err('Failed to parse AI response', 502)
     }
 
     const baseTerms = extractTerms(resume.parsed_sections)
@@ -178,8 +144,8 @@ export async function POST(request: NextRequest) {
     const { data: existing } = await supabaseAdmin
       .from('optimized_cvs')
       .select('version')
-      .eq('base_resume_id', base_resume_id)
-      .eq('job_id', job_id)
+      .eq('base_resume_id', input.base_resume_id)
+      .eq('job_id', input.job_id)
       .order('version', { ascending: false })
       .limit(1)
       .maybeSingle()
@@ -189,8 +155,8 @@ export async function POST(request: NextRequest) {
     const { data: optimized, error: insertError } = await supabaseAdmin
       .from('optimized_cvs')
       .insert({
-        base_resume_id,
-        job_id,
+        base_resume_id: input.base_resume_id,
+        job_id: input.job_id,
         version,
         generated_sections: generatedSections,
         flagged_terms: flaggedTerms,
@@ -201,10 +167,10 @@ export async function POST(request: NextRequest) {
 
     if (insertError) {
       console.error('Insert error:', insertError)
-      return NextResponse.json({ error: 'Failed to save optimized CV' }, { status: 500 })
+      return err('Failed to save optimized CV', 500)
     }
 
-    return NextResponse.json({
+    return ok({
       id: optimized.id,
       version: optimized.version,
       generated_sections: generatedSections,
@@ -213,6 +179,6 @@ export async function POST(request: NextRequest) {
     })
   } catch (err: any) {
     console.error('Optimize CV error:', err)
-    return NextResponse.json({ error: err.message || 'Internal error' }, { status: 500 })
+    return err(err.message || 'Internal error', 500)
   }
 }
