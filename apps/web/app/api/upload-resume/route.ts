@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase-admin'
+import { getSupabaseAdmin } from '@/lib/supabase-admin'
 import { getUserFromRequest, err } from '@/lib/api-helpers'
 
 export async function POST(req: NextRequest) {
@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
   const filePath = `${user.id}/${crypto.randomUUID()}.${fileExt}`
 
   const bytes = await file.arrayBuffer()
-  const { error: uploadError } = await supabaseAdmin.storage
+  const { error: uploadError } = await getSupabaseAdmin().storage
     .from('resumes')
     .upload(filePath, new Uint8Array(bytes), {
       contentType: file.type,
@@ -33,9 +33,9 @@ export async function POST(req: NextRequest) {
     return err(uploadError.message, 500)
   }
 
-  const { data: urlData } = supabaseAdmin.storage.from('resumes').getPublicUrl(filePath)
+  const { data: urlData } = getSupabaseAdmin().storage.from('resumes').getPublicUrl(filePath)
 
-  const { data, error: dbError } = await supabaseAdmin
+  const { data, error: dbError } = await getSupabaseAdmin()
     .from('base_resumes')
     .insert({
       user_id: user.id,
@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
     .single()
 
   if (dbError) {
-    await supabaseAdmin.storage.from('resumes').remove([filePath])
+    await getSupabaseAdmin().storage.from('resumes').remove([filePath])
     return err(dbError.message, 500)
   }
 

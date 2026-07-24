@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { supabaseAdmin } from '@/lib/supabase-admin'
+import { getSupabaseAdmin } from '@/lib/supabase-admin'
 
 async function getUserFromToken(request: NextRequest) {
   const authHeader = request.headers.get('authorization')
@@ -27,7 +27,7 @@ export async function GET(
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const app = await supabaseAdmin
+  const app = await getSupabaseAdmin()
     .from('applications')
     .select('*')
     .eq('id', params.id)
@@ -38,7 +38,7 @@ export async function GET(
     return NextResponse.json({ error: 'Not found' }, { status: 404 })
   }
 
-  const logs = await supabaseAdmin
+  const logs = await getSupabaseAdmin()
     .from('application_audit_logs')
     .select('*')
     .eq('application_id', params.id)

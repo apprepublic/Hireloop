@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 import { z } from 'zod'
 import { getUserFromRequest, validate, ok, err } from '@/lib/api-helpers'
-import { supabaseAdmin } from '@/lib/supabase-admin'
+import { getSupabaseAdmin } from '@/lib/supabase-admin'
 
 const BodySchema = z.object({
   job_id: z.string().uuid(),
@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
     if (parsed.error) return parsed.error
     const input = parsed.data
 
-    const job = await supabaseAdmin
+    const job = await getSupabaseAdmin()
       .from('jobs')
       .select('*')
       .eq('id', input.job_id)

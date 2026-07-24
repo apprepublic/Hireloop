@@ -1,4 +1,4 @@
-import { supabaseAdmin } from '@/lib/supabase-admin'
+import { getSupabaseAdmin } from '@/lib/supabase-admin'
 import { normalizeJob } from './normalizer'
 import { fetchAdzunaJobs } from './adzuna'
 import { fetchJoobleJobs } from './jooble'
@@ -53,7 +53,7 @@ async function upsertJobs(
   for (const raw of rawJobs) {
     const normalized = normalizeJob(raw)
 
-    const { data: existing } = await supabaseAdmin
+    const { data: existing } = await getSupabaseAdmin()
       .from('jobs')
       .select('id')
       .eq('source_id', normalized.source_id)
@@ -61,7 +61,7 @@ async function upsertJobs(
       .maybeSingle()
 
     if (existing) {
-      const { error } = await supabaseAdmin
+      const { error } = await getSupabaseAdmin()
         .from('jobs')
         .update({
           title: normalized.title,
@@ -83,7 +83,7 @@ async function upsertJobs(
 
       if (!error) updated++
     } else {
-      const { error } = await supabaseAdmin
+      const { error } = await getSupabaseAdmin()
         .from('jobs')
         .insert({
           ...normalized,

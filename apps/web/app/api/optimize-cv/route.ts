@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 import { z } from 'zod'
 import { getUserFromRequest, validate, ok, err } from '@/lib/api-helpers'
-import { supabaseAdmin } from '@/lib/supabase-admin'
+import { getSupabaseAdmin } from '@/lib/supabase-admin'
 
 const BodySchema = z.object({
   base_resume_id: z.string().uuid(),
@@ -81,7 +81,7 @@ export async function POST(request: NextRequest) {
     if (parsed.error) return parsed.error
     const input = parsed.data
 
-    const resume = await supabaseAdmin
+    const resume = await getSupabaseAdmin()
       .from('base_resumes')
       .select('*')
       .eq('id', input.base_resume_id)
@@ -92,7 +92,7 @@ export async function POST(request: NextRequest) {
     if (resume.user_id !== user.id) return err('Forbidden', 403)
     if (!resume.parsed_sections) return err('Resume has not been parsed yet', 400)
 
-    const job = await supabaseAdmin
+    const job = await getSupabaseAdmin()
       .from('jobs')
       .select('*')
       .eq('id', input.job_id)
@@ -142,7 +142,7 @@ export async function POST(request: NextRequest) {
     const baseTerms = extractTerms(resume.parsed_sections)
     const flaggedTerms = findFlaggedTerms(generatedSections, baseTerms)
 
-    const { data: existing } = await supabaseAdmin
+    const { data: existing } = await getSupabaseAdmin()
       .from('optimized_cvs')
       .select('version')
       .eq('base_resume_id', input.base_resume_id)
@@ -153,7 +153,7 @@ export async function POST(request: NextRequest) {
 
     const version = (existing?.version ?? 0) + 1
 
-    const { data: optimized, error: insertError } = await supabaseAdmin
+    const { data: optimized, error: insertError } = await getSupabaseAdmin()
       .from('optimized_cvs')
       .insert({
         base_resume_id: input.base_resume_id,

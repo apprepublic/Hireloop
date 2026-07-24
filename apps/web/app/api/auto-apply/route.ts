@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 import { z } from 'zod'
 import { getUserFromRequest, validate, ok, err } from '@/lib/api-helpers'
-import { supabaseAdmin } from '@/lib/supabase-admin'
+import { getSupabaseAdmin } from '@/lib/supabase-admin'
 import { ATS_PLATFORMS, getATSFieldHints } from '@/lib/ingestion/normalizer'
 
 const BodySchema = z.object({
@@ -12,7 +12,7 @@ const BodySchema = z.object({
 const ALLOWED_ATS = ATS_PLATFORMS.map((a) => a.id)
 
 function addAuditLog(applicationId: string, step: string, fieldValues?: Record<string, any>) {
-  return supabaseAdmin.from('application_audit_logs').insert({
+  return getSupabaseAdmin().from('application_audit_logs').insert({
     application_id: applicationId,
     step,
     field_values: fieldValues ?? null,
@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
     if (parsed.error) return parsed.error
     const input = parsed.data
 
-    const job = await supabaseAdmin
+    const job = await getSupabaseAdmin()
       .from('jobs')
       .select('*')
       .eq('id', input.job_id)
@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
       return err(`Auto-apply not supported for ${job.ats_platform || 'this platform'}`, 400)
     }
 
-    const { data: application, error: insertError } = await supabaseAdmin
+    const { data: application, error: insertError } = await getSupabaseAdmin()
       .from('applications')
       .insert({
         user_id: user.id,
@@ -108,14 +108,14 @@ async function runAgent(applicationId: string, job: any, optimizedCvId: string |
       total_fields_filled: fieldHints.length + (optimizedCvId ? 1 : 0),
     })
 
-    await supabaseAdmin
+    await getSupabaseAdmin()
       .from('applications')
       .update({ status: 'submitted', submitted_at: new Date().toISOString() })
       .eq('id', applicationId)
   } catch (err) {
     console.error('Agent run failed:', err)
     await addAuditLog(applicationId, 'failed', { error: String(err) })
-    await supabaseAdmin.from('applications').update({ status: 'failed' }).eq('id', applicationId)
+    await getSupabaseAdmin().from('applications').update({ status: 'failed' }).eq('id', applicationId)
   }
 }
 
