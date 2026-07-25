@@ -28,14 +28,15 @@ export default function OnboardingPage() {
 
   useEffect(() => {
     if (!user) return
-    supabase
-      .from('search_profiles')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-      .then(({ data }) => {
+    ;(async () => {
+      try {
+        const { data } = await supabase
+          .from('search_profiles')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
         if (data) {
           const p = data as unknown as SearchProfile
           setExistingProfile(p)
@@ -47,8 +48,10 @@ export default function OnboardingPage() {
           setSalaryMin(p.salary_min ? String(p.salary_min) : '')
           setSources(p.enabled_sources)
         }
-      })
-      .finally(() => setLoadingProfile(false))
+      } finally {
+        setLoadingProfile(false)
+      }
+    })()
   }, [user])
 
   const addKeyword = () => {
