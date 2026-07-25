@@ -19,30 +19,36 @@ export default function FeedPage() {
   const [searchProfile, setSearchProfile] = useState<SearchProfile | null>(null)
   const [savedJobIds, setSavedJobIds] = useState<Set<string>>(new Set())
   const [dismissedJobIds, setDismissedJobIds] = useState<Set<string>>(new Set())
+  const [error, setError] = useState<string | null>(null)
   const observerRef = useRef<IntersectionObserver | null>(null)
   const loadMoreRef = useRef<HTMLDivElement>(null)
 
   const loadJobs = useCallback(async (cursorVal?: string) => {
     if (!user || !searchProfile) return
 
-    const result = await getJobs({
-      keywords: searchProfile.title_keywords,
-      location: searchProfile.location || undefined,
-      remote: searchProfile.remote_preference,
-      seniority: searchProfile.seniority || undefined,
-      salary_min: searchProfile.salary_min || undefined,
-      job_type: searchProfile.job_type || undefined,
-      sources: searchProfile.enabled_sources as SourceId[],
-      cursor: cursorVal,
-    })
+    try {
+      setError(null)
+      const result = await getJobs({
+        keywords: searchProfile.title_keywords,
+        location: searchProfile.location || undefined,
+        remote: searchProfile.remote_preference,
+        seniority: searchProfile.seniority || undefined,
+        salary_min: searchProfile.salary_min || undefined,
+        job_type: searchProfile.job_type || undefined,
+        sources: searchProfile.enabled_sources as SourceId[],
+        cursor: cursorVal,
+      })
 
-    if (cursorVal) {
-      setJobs((prev) => [...prev, ...result.data.filter((j) => !dismissedJobIds.has(j.id))])
-    } else {
-      setJobs(result.data.filter((j) => !dismissedJobIds.has(j.id)))
+      if (cursorVal) {
+        setJobs((prev) => [...prev, ...result.data.filter((j) => !dismissedJobIds.has(j.id))])
+      } else {
+        setJobs(result.data.filter((j) => !dismissedJobIds.has(j.id)))
+      }
+      setCursor(result.cursor)
+      setHasMore(result.has_more)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load jobs')
     }
-    setCursor(result.cursor)
-    setHasMore(result.has_more)
   }, [user, searchProfile, dismissedJobIds])
 
   useEffect(() => {
@@ -160,6 +166,14 @@ export default function FeedPage() {
                     <div className="h-3 w-2/3 bg-muted rounded" />
                   </div>
                 ))}
+              </div>
+            ) : error ? (
+              <div className="border-2 border-dashed border-destructive/50 rounded-lg p-12 text-center">
+                <p className="text-destructive font-medium mb-2">Error loading jobs</p>
+                <p className="text-sm text-muted-foreground mb-4">{error}</p>
+                <Button variant="outline" onClick={() => { setError(null); loadJobs() }}>
+                  Retry
+                </Button>
               </div>
             ) : jobs.length === 0 ? (
               <div className="border-2 border-dashed border-border rounded-lg p-12 text-center">
