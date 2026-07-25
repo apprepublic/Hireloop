@@ -49,52 +49,37 @@ async function upsertJobs(
   rawJobs: import('./types').RawJob[],
   isLinkedIn: boolean = false,
 ): Promise<{ inserted: number; updated: number }> {
-  let inserted = 0
-  let updated = 0
+  if (rawJobs.length === 0) return { inserted: 0, updated: 0 }
 
-  for (const raw of rawJobs) {
-    const normalized = await normalizeJob(raw)
+  const supabase = getSupabaseAdmin()
+  const normalized = await Promise.all(rawJobs.map(j => normalizeJob(j)))
 
-    const { data: existing } = await getSupabaseAdmin()
-      .from('jobs')
-      .select('id')
-      .eq('source_id', normalized.source_id)
-      .eq('external_id', normalized.external_id)
-      .maybeSingle()
-
-    if (existing) {
-      const { error } = await getSupabaseAdmin()
-        .from('jobs')
-        .update({
-          title: normalized.title,
-          company: normalized.company,
-          location: normalized.location,
-          is_remote: normalized.is_remote,
-          description: normalized.description,
-          salary_min: normalized.salary_min,
-          salary_max: normalized.salary_max,
-          job_type: normalized.job_type,
-          seniority: normalized.seniority,
-          apply_url: normalized.apply_url,
-          ats_platform: normalized.ats_platform,
-          auto_apply_eligible: isLinkedIn ? false : normalized.auto_apply_eligible,
-          posted_at: normalized.posted_at,
-          match_score: normalized.match_score,
-        })
-        .eq('id', existing.id)
-
-      if (!error) updated++
-    } else {
-      const { error } = await getSupabaseAdmin()
-        .from('jobs')
-        .insert({
-          ...normalized,
-          auto_apply_eligible: isLinkedIn ? false : normalized.auto_apply_eligible,
-        })
-
-      if (!error) inserted++
+  if (isLinkedIn) {
+    for (const job of normalized) {
+      job.auto_apply_eligible = false
     }
   }
+
+  const sourceId = normalized[0].source_id
+  const externalIds = normalized.map(j => j.external_id)
+
+  const { data: existing } = await supabase
+    .from('jobs')
+    .select('external_id')
+    .eq('source_id', sourceId)
+    .in('external_id', externalIds)
+
+  const existingSet = new Set(existing?.map(j => j.external_id) ?? [])
+  const existingCount = [...new Set(externalIds)].filter(id => existingSet.has(id)).length
+
+  const { error } = await supabase
+    .from('jobs')
+    .upsert(normalized, { onConflict: 'source_id, external_id' })
+
+  if (error) throw error
+
+  const inserted = normalized.length - existingCount
+  const updated = existingCount
 
   return { inserted, updated }
 }
