@@ -40,10 +40,10 @@ export async function fetchLinkedInJobs(
   try {
     const runInput: Record<string, unknown> = {
       keyword: searchTerms.join(' '),
+      location: location || 'United States',
       maxJobs: 50,
       fetchDetails: true,
     }
-    if (location) runInput.location = location
 
     const res = await fetch(
       `${APIFY_API_BASE}/acts/${ACTOR_ID}/run-sync-get-dataset-items?token=${apifyToken}`,
@@ -60,7 +60,8 @@ export async function fetchLinkedInJobs(
       return { jobs, result: { source: 'linkedin_unofficial', fetched: 0, inserted: 0, updated: 0, errors } }
     }
 
-    const items = await res.json()
+    const body = await res.json()
+    const items = Array.isArray(body) ? body : (body.data ?? body.items ?? [])
     for (const item of items) {
       const job = mapLinkedInJob(item)
       if (job) jobs.push(job)
