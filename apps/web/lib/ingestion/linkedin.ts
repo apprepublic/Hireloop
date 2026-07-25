@@ -1,7 +1,7 @@
 import type { RawJob, IngestionResult } from './types'
 
 const APIFY_API_BASE = 'https://api.apify.com/v2'
-const ACTOR_ID = 'crawlerforge~linkedin-jobs-scraper'
+const ACTOR_ID = 'aligned_safe~linkedin-jobs-scraper-2026'
 
 function pick(item: any, keys: string[]): string {
   for (const k of keys) {
@@ -27,13 +27,13 @@ function mapLinkedInJob(item: any): RawJob | null {
 
   const rawType = pick(item, ['contract_type', 'contractType', 'job_type', 'jobType', 'employment_type', 'employmentType'])
   const rawSeniority = pick(item, ['experience_level', 'experienceLevel', 'seniority_level', 'seniorityLevel'])
-  const rawDate = pick(item, ['posted_date', 'postedDate', 'posted_at', 'postedAt', 'date_posted', 'datePosted'])
+  const rawDate = pick(item, ['posted_date', 'postedDate', 'posted_at', 'postedAt', 'date_posted', 'datePosted', 'scrapedAt'])
   const rawLocation = pick(item, ['location', 'locations', 'city', 'job_location', 'jobLocation'])
   const rawDescription = pick(item, ['description', 'description_text', 'descriptionText', 'description_html', 'descriptionHtml', 'snippet'])
 
   return {
     source_id: 'linkedin_unofficial',
-    external_id: String(item.id || item.url || item.linkedinUrl || item.canonicalJobId || title),
+    external_id: String(item.id || item.url || item.linkedinUrl || item.canonicalJobId || item.job_id || item.jobId || item.listingId || title),
     title,
     company,
     location: rawLocation || null,
@@ -62,8 +62,7 @@ export async function fetchLinkedInJobs(
     const runInput: Record<string, unknown> = {
       keyword: searchTerms.join(' '),
       location: location || 'United States',
-      maxJobs: 50,
-      fetchDetails: true,
+      pages: 1,
     }
 
     const res = await fetch(
