@@ -21,7 +21,7 @@ function mapAdzunaJob(item: any, country: string, appId: string, appKey: string)
     currency: item.salary_currency || 'USD',
     job_type: item.contract_type?.toLowerCase() || null,
     seniority: null,
-    apply_url: item.redirect_url,
+    apply_url: item.redirect_url || '',
     ats_platform: null,
     posted_at: item.created ? new Date(item.created).toISOString() : null,
   }

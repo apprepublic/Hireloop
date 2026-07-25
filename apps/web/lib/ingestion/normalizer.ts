@@ -1,7 +1,7 @@
 import type { RawJob } from './types'
 
 export async function computeDedupeHash(job: { title: string; company: string; location: string | null }): Promise<string> {
-  const raw = `${job.title.toLowerCase().trim()}|${job.company.toLowerCase().trim()}|${(job.location || '').toLowerCase().trim()}`
+  const raw = `${(job.title ?? '').toLowerCase().trim()}|${(job.company ?? '').toLowerCase().trim()}|${(job.location || '').toLowerCase().trim()}`
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(raw))
   return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('')
 }
@@ -72,22 +72,23 @@ export function getATSFieldHints(atsPlatform: string): string[] {
 }
 
 export async function normalizeJob(raw: RawJob) {
+  const url = raw.apply_url ?? ''
   return {
     source_id: raw.source_id,
     external_id: raw.external_id,
-    title: raw.title.trim(),
-    company: raw.company.trim(),
+    title: (raw.title ?? '').trim(),
+    company: (raw.company ?? '').trim(),
     location: raw.location?.trim() || null,
     is_remote: raw.is_remote,
-    description: raw.description.trim(),
+    description: (raw.description ?? '').trim(),
     salary_min: raw.salary_min,
     salary_max: raw.salary_max,
     currency: raw.currency || 'USD',
     job_type: raw.job_type,
     seniority: raw.seniority,
-    apply_url: raw.apply_url.trim(),
-    ats_platform: detectATSPlatform(raw.apply_url),
-    auto_apply_eligible: raw.source_id !== 'linkedin_unofficial' && detectATSPlatform(raw.apply_url) !== null,
+    apply_url: url,
+    ats_platform: detectATSPlatform(url),
+    auto_apply_eligible: raw.source_id !== 'linkedin_unofficial' && detectATSPlatform(url) !== null,
     posted_at: raw.posted_at ? new Date(raw.posted_at).toISOString() : null,
     dedupe_hash: await computeDedupeHash(raw),
     match_score: computeMatchScore(raw),

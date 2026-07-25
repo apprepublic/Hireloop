@@ -30,7 +30,7 @@ function mapJoobleJob(item: any): RawJob | null {
     currency: 'USD',
     job_type: item.type?.toLowerCase() || null,
     seniority: null,
-    apply_url: item.url,
+    apply_url: item.url || '',
     ats_platform: null,
     posted_at: item.updated ? new Date(item.updated).toISOString() : null,
   }
