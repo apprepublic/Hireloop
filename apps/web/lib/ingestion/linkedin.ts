@@ -1,37 +1,52 @@
 import type { RawJob, IngestionResult } from './types'
 
 const APIFY_API_BASE = 'https://api.apify.com/v2'
-const ACTOR_ID = 'bebity~linkedin-jobs-scraper'
+const ACTOR_ID = 'crawlerforge~linkedin-jobs-scraper'
+
+function pick(item: any, keys: string[]): string {
+  for (const k of keys) {
+    const v = item[k]
+    if (v != null && v !== '') return String(v)
+  }
+  return ''
+}
 
 function mapLinkedInJob(item: any): RawJob | null {
-  if (!item?.title || !item?.companyName) return null
+  const title = pick(item, ['title', 'job_title', 'jobTitle', 'position'])
+  const company = pick(item, ['company', 'company_name', 'companyName', 'company_name', 'employer', 'organization'])
+  if (!title || !company) return null
 
   let salaryMin: number | null = null
   let salaryMax: number | null = null
-  if (item.salary) {
-    const nums = String(item.salary).replace(/[$£€,]/g, '').match(/([\d.]+)/g)?.map(Number) || []
+  const rawSalary = item.salary || item.salary_text || item.salaryText || ''
+  if (rawSalary) {
+    const nums = String(rawSalary).replace(/[$£€,]/g, '').match(/([\d.]+)/g)?.map(Number) || []
     if (nums.length >= 2) { salaryMin = nums[0]; salaryMax = nums[1] }
     else if (nums.length === 1) { salaryMax = nums[0] }
   }
 
-  const currency = item.salaryCurrency || 'USD'
+  const rawType = pick(item, ['contract_type', 'contractType', 'job_type', 'jobType', 'employment_type', 'employmentType'])
+  const rawSeniority = pick(item, ['experience_level', 'experienceLevel', 'seniority_level', 'seniorityLevel'])
+  const rawDate = pick(item, ['posted_date', 'postedDate', 'posted_at', 'postedAt', 'date_posted', 'datePosted'])
+  const rawLocation = pick(item, ['location', 'locations', 'city', 'job_location', 'jobLocation'])
+  const rawDescription = pick(item, ['description', 'description_text', 'descriptionText', 'description_html', 'descriptionHtml', 'snippet'])
 
   return {
     source_id: 'linkedin_unofficial',
-    external_id: String(item.id || item.url || item.title),
-    title: item.title,
-    company: item.companyName,
-    location: item.location || null,
-    is_remote: item.workType === '2' || false,
-    description: item.description || '',
+    external_id: String(item.id || item.url || item.linkedinUrl || item.canonicalJobId || title),
+    title,
+    company,
+    location: rawLocation || null,
+    is_remote: /remote|work-from-home|wfh/i.test(rawLocation || ''),
+    description: rawDescription,
     salary_min: salaryMin,
     salary_max: salaryMax,
-    currency,
-    job_type: item.contractType?.toLowerCase() || null,
-    seniority: item.experienceLevel?.toLowerCase() || null,
-    apply_url: item.url || '',
+    currency: 'USD',
+    job_type: rawType.toLowerCase() || null,
+    seniority: rawSeniority.toLowerCase() || null,
+    apply_url: pick(item, ['url', 'apply_url', 'applyUrl', 'linkedin_url', 'linkedinUrl', 'job_url', 'jobUrl']),
     ats_platform: null,
-    posted_at: item.postedDate ? new Date(item.postedDate).toISOString() : null,
+    posted_at: rawDate ? new Date(rawDate).toISOString() : null,
   }
 }
 
@@ -45,10 +60,10 @@ export async function fetchLinkedInJobs(
 
   try {
     const runInput: Record<string, unknown> = {
-      title: searchTerms.join(' '),
+      keyword: searchTerms.join(' '),
       location: location || 'United States',
-      rows: 50,
-      proxy: { useApifyProxy: true, apifyProxyGroups: ['RESIDENTIAL'] },
+      maxJobs: 50,
+      fetchDetails: true,
     }
 
     const res = await fetch(
@@ -67,15 +82,16 @@ export async function fetchLinkedInJobs(
     }
 
     const body = await res.json()
-    const items = Array.isArray(body) ? body : (body.data ?? body.items ?? [])
-    if (!Array.isArray(items)) {
-      errors.push(`LinkedIn: Unexpected response shape: ${JSON.stringify(body).slice(0, 500)}`)
-    } else if (items.length === 0) {
-      errors.push(`LinkedIn: Actor returned 0 results for title="${runInput.title}" location="${runInput.location}"`)
+    const raw = Array.isArray(body) ? body : (body.data ?? body.items ?? [])
+    if (!Array.isArray(raw)) {
+      errors.push(`LinkedIn: Response shape: ${JSON.stringify(body).slice(0, 500)}`)
+    } else if (raw.length === 0) {
+      errors.push(`LinkedIn: 0 results for keyword="${runInput.keyword}" location="${runInput.location}"`)
     } else {
-      for (const item of items) {
+      for (const item of raw) {
         const job = mapLinkedInJob(item)
         if (job) jobs.push(job)
+        else errors.push(`LinkedIn: Skipped item (missing title/company): keys=${Object.keys(item).join(',')}`)
       }
     }
   } catch (err: any) {
