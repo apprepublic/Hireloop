@@ -1,11 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/stores/authStore'
 import { supabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
-import type { SourceId } from '@hireloop/shared'
+import type { SourceId, SearchProfile } from '@hireloop/shared'
 
 type Step = 'titles' | 'location' | 'seniority' | 'sources'
 
@@ -22,6 +22,34 @@ export default function OnboardingPage() {
   const [salaryMin, setSalaryMin] = useState('')
   const [sources, setSources] = useState<SourceId[]>(['adzuna', 'jooble'])
   const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const [existingProfile, setExistingProfile] = useState<SearchProfile | null>(null)
+  const [loadingProfile, setLoadingProfile] = useState(true)
+
+  useEffect(() => {
+    if (!user) return
+    supabase
+      .from('search_profiles')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) {
+          const p = data as unknown as SearchProfile
+          setExistingProfile(p)
+          setKeywords(p.title_keywords)
+          setLocation(p.location || '')
+          setRemotePref(p.remote_preference)
+          setSeniority(p.seniority || '')
+          setJobType(p.job_type || '')
+          setSalaryMin(p.salary_min ? String(p.salary_min) : '')
+          setSources(p.enabled_sources)
+        }
+      })
+      .finally(() => setLoadingProfile(false))
+  }, [user])
 
   const addKeyword = () => {
     const trimmed = keywordInput.trim()
@@ -48,8 +76,9 @@ export default function OnboardingPage() {
   const handleSave = async () => {
     if (!user) return
     setSaving(true)
-    const { error } = await supabase.from('search_profiles').insert({
-      user_id: user.id,
+    setSaveError(null)
+
+    const payload = {
       title_keywords: keywords,
       location: location || null,
       remote_preference: remotePref,
@@ -57,9 +86,26 @@ export default function OnboardingPage() {
       salary_min: salaryMin ? parseInt(salaryMin) : null,
       job_type: jobType || null,
       enabled_sources: sources,
-    })
+    }
+
+    let error: any = null
+    if (existingProfile) {
+      const { error: e } = await supabase
+        .from('search_profiles')
+        .update(payload)
+        .eq('id', existingProfile.id)
+      error = e
+    } else {
+      const { error: e } = await supabase
+        .from('search_profiles')
+        .insert({ user_id: user.id, ...payload })
+      error = e
+    }
+
     setSaving(false)
-    if (!error) {
+    if (error) {
+      setSaveError(error.message || 'Failed to save search profile')
+    } else {
       router.push('/feed')
     }
   }
@@ -77,6 +123,18 @@ export default function OnboardingPage() {
       </div>
 
       <main className="flex-1 max-w-lg mx-auto w-full px-4 py-12">
+        {loadingProfile && (
+          <div className="flex items-center justify-center py-12">
+            <div className="animate-spin h-6 w-6 border-2 border-primary border-t-transparent rounded-full" />
+          </div>
+        )}
+
+        {!loadingProfile && saveError && (
+          <div className="bg-card border border-red-500/50 rounded-lg p-4 mb-6 text-sm text-red-600">
+            {saveError}
+          </div>
+        )}
+
         {/* Step 1: Titles/Keywords */}
         {step === 'titles' && (
           <div className="space-y-6">
