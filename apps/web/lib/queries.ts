@@ -53,8 +53,11 @@ export async function getJobs(opts: {
   }
 
     if (opts.keywords && opts.keywords.length > 0) {
-    const searchTerms = opts.keywords.join(' | ')
-    q = q.textSearch('fts', searchTerms)
+    const searchTerms = opts.keywords
+      .map(k => k.trim().split(/\s+/).filter(Boolean).join(' & '))
+      .filter(Boolean)
+      .join(' | ')
+    if (searchTerms) q = q.textSearch('fts', searchTerms)
   }
 
   const { data, error } = await q
